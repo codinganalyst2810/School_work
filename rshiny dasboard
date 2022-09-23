@@ -1,0 +1,736 @@
+library(fresh)
+library(shinydashboard)
+library(wordcloud2)
+library(ggplot2)
+library(plotly)
+library(tidyverse)
+library(shiny)
+library(dplyr)
+# Create the theme
+mytheme <- create_theme(
+  adminlte_color(
+    light_blue = "#434C5E"
+  ),
+  adminlte_sidebar(
+    width = "200px",
+    dark_bg = "#D8DEE9",
+    dark_hover_bg = "#81A1C1",
+    dark_color = "#2E3440"
+  ),
+  adminlte_global(
+    content_bg = "#FFF",
+    box_bg = "#D8DEE9", 
+    info_box_bg = "#D8DEE9"
+  )
+)
+
+
+#h3 is font size of "Select Box", higher number means a smaller size in font
+
+d5<-read.csv("dat_4.csv")
+d4<-read_csv("k3.csv") #input file from the cluster analysis. we saved it to avoid reruns
+d3<-read.csv("dat_3.csv")
+d2<-read.csv("dat_2.csv")
+
+d3new<-d3
+d3new$term <- gsub("_.*","",d3new$term)
+d3new<-filter(d3new, diff_ratio >= -5.5)
+
+duplicates <- count(d3new, term)
+duplicates <- arrange(duplicates, desc(n))
+
+d3newt9 <- slice(duplicates, 1:10)
+
+test1 <- slice(duplicates, 11:72)
+test2 <- slice(duplicates, 75:84)
+fodder <- bind_rows(d3newt9,test1,test2)
+
+d3newt9 <- select(d3newt9, term)
+fodder <- select(fodder,term)
+
+for (x in fodder$term){
+  d3new <- filter(d3new, term != x)
+}
+
+d3new<-distinct(d3new, term, .keep_all = TRUE)
+d3new<-arrange(d3new, topic, desc(diff_ratio))
+d3new<-filter(d3new, term != "choose" & term != "medium" & term != "device" & term != "write" & term != "produce" & term != "major")
+
+wordlist<-filter(d3new, topic == 1)
+wordlist<-slice(wordlist, 1:10)
+wordlist<-select(wordlist, term)
+
+topicrange = 2:15
+
+for (x in topicrange){
+  topicwords<-filter(d3new, topic == x)
+  topicwords<-slice(topicwords, 1:10)
+  topicwords<-select(topicwords, term)
+  if (x == 9){
+    wordlist<-bind_cols(wordlist,d3newt9)
+  }
+  else{
+    wordlist<-bind_cols(wordlist,topicwords)
+  }
+}
+wordlist<-rename(wordlist, finance = term...1, digital = term...2, medicine = term...3, leadership = term...4, security = term...5, therapy = term...6, analytics = term...7, capstone = term...8, common = term...9, management = term...10, mathematics = term...11, psychology = term...12, nutrition = term...13, society = term...14, marketing = term...15)
+
+tfinance<-filter(d3new, topic == 1)
+tfinance<-slice(tfinance, 1:10)
+tfinance<-select(tfinance, term, diff_ratio)
+
+tdigital<-filter(d3new, topic == 2)
+tdigital<-slice(tdigital, 1:10)
+tdigital<-select(tdigital, term, diff_ratio)
+
+tmedicine<-filter(d3new, topic == 3)
+tmedicine<-slice(tmedicine, 1:10)
+tmedicine<-select(tmedicine, term, diff_ratio)
+
+tleadership<-filter(d3new, topic == 4)
+tleadership<-slice(tleadership, 1:10)
+tleadership<-select(tleadership, term, diff_ratio)
+
+tsecurity<-filter(d3new, topic == 5)
+tsecurity<-slice(tsecurity, 1:10)
+tsecurity<-select(tsecurity, term, diff_ratio)
+
+ttherapy<-filter(d3new, topic == 6)
+ttherapy<-slice(ttherapy, 1:10)
+ttherapy<-select(ttherapy, term, diff_ratio)
+
+tanalytics<-filter(d3new, topic == 7)
+tanalytics<-slice(tanalytics, 1:10)
+tanalytics<-select(tanalytics, term, diff_ratio)
+
+tcapstone<-filter(d3new, topic == 8)
+tcapstone<-slice(tcapstone, 1:10)
+tcapstone<-select(tcapstone, term, diff_ratio)
+
+d3$term <- gsub("_.*","",d3$term)
+tcommon<-inner_join(d3,d3newt9)
+tcommon<-arrange(tcommon, desc(diff_ratio))
+tcommon<-distinct(tcommon,term, .keep_all = TRUE)
+tcommon<-select(tcommon, term, diff_ratio)
+
+tmanagement<-filter(d3new, topic == 10)
+tmanagement<-slice(tmanagement, 1:10)
+tmanagement<-select(tmanagement, term, diff_ratio)
+
+tmathematics<-filter(d3new, topic == 11)
+tmathematics<-slice(tmathematics, 1:10)
+tmathematics<-select(tmathematics, term, diff_ratio)
+
+tpsychology<-filter(d3new, topic == 12)
+tpsychology<-slice(tpsychology, 1:10)
+tpsychology<-select(tpsychology, term, diff_ratio)
+
+tnutrition<-filter(d3new, topic == 13)
+tnutrition<-slice(tnutrition, 1:10)
+tnutrition<-select(tnutrition, term, diff_ratio)
+
+tsociety<-filter(d3new, topic == 14)
+tsociety<-slice(tsociety, 1:10)
+tsociety<-select(tsociety, term, diff_ratio)
+
+tmarketing<-filter(d3new, topic == 15)
+tmarketing<-slice(tmarketing, 1:10)
+tmarketing<-select(tmarketing, term, diff_ratio)
+
+wordinstances <- count(d5, word)
+
+d2new <- select(d2, X1:positive)
+d2topic <- select(d2new, X1:X15)
+d2topic<-rename(d2topic, finance = X1, digital = X2, medicine = X3, leadership = X4, security = X5, therapy = X6, analytics = X7, capstone = X8, common = X9, management = X10, mathematics = X11, psychology = X12, nutrition = X13, society = X14, marketing = X15)
+d2sentiment <- select(d2new, anger:positive)
+d2colnames <- colnames(d2topic)[max.col(d2topic)]
+test <- bind_cols(d2colnames,d2sentiment)
+test <- rename(test, topic = ...1)
+financesum <- filter(test, topic == "finance")
+financesum <- mutate(financesum, across(anger:positive, sum))
+financesum <- slice_head(financesum)
+
+medicinesum <- filter(test, topic == "medicine")
+medicinesum <- mutate(medicinesum, across(anger:positive, sum))
+medicinesum <- slice_head(medicinesum)
+
+leadershipsum <- filter(test, topic == "leadership")
+leadershipsum <- mutate(leadershipsum, across(anger:positive, sum))
+leadershipsum <- slice_head(leadershipsum)
+
+securitysum <- filter(test, topic == "security")
+securitysum <- mutate(securitysum, across(anger:positive, sum))
+securitysum <- slice_head(securitysum)
+
+therapysum <- filter(test, topic == "therapy")
+therapysum <- mutate(therapysum, across(anger:positive, sum))
+therapysum <- slice_head(therapysum)
+
+digitalsum <- filter(test, topic == "digital")
+digitalsum <- mutate(digitalsum, across(anger:positive, sum))
+digitalsum <- slice_head(digitalsum)
+
+analyticssum <- filter(test, topic == "analytics")
+analyticssum <- mutate(analyticssum, across(anger:positive, sum))
+analyticssum <- slice_head(analyticssum)
+
+capstonesum <- filter(test, topic == "capstone")
+capstonesum <- mutate(capstonesum, across(anger:positive, sum))
+capstonesum <- slice_head(capstonesum)
+
+commonsum <- filter(test, topic == "common")
+commonsum <- mutate(commonsum, across(anger:positive, sum))
+commonsum <- slice_head(commonsum)
+
+managementsum <- filter(test, topic == "management")
+managementsum <- mutate(managementsum, across(anger:positive, sum))
+managementsum <- slice_head(managementsum)
+
+mathematicssum <- filter(test, topic == "mathematics")
+mathematicssum <- mutate(mathematicssum, across(anger:positive, sum))
+mathematicssum <- slice_head(mathematicssum)
+
+psychologysum <- filter(test, topic == "psychology")
+psychologysum <- mutate(psychologysum, across(anger:positive, sum))
+psychologysum <- slice_head(psychologysum)
+
+nutritionsum <- filter(test, topic == "nutrition")
+nutritionsum <- mutate(nutritionsum, across(anger:positive, sum))
+nutritionsum <- slice_head(nutritionsum)
+
+societysum <- filter(test, topic == "society")
+societysum <- mutate(societysum, across(anger:positive, sum))
+societysum <- slice_head(societysum)
+
+marketingsum <- filter(test, topic == "marketing")
+marketingsum <- mutate(marketingsum, across(anger:positive, sum))
+marketingsum <- slice_head(marketingsum)
+
+sentimentsum <- bind_rows(financesum, digitalsum, medicinesum, leadershipsum, securitysum, therapysum, analyticssum, capstonesum, commonsum, managementsum, mathematicssum, psychologysum, nutritionsum, societysum, marketingsum)
+
+sentiment <- c("anger", "anticipation", "disgust", "fear", "joy", "sadness", "surprise", "trust", "negative", "positive")
+
+financeanger <- select(financesum, anger)
+financeanticipation <- select(financesum, anticipation)
+financedisgust <- select(financesum, disgust)
+financefear <- select(financesum, fear)
+financejoy <- select(financesum, joy)
+financesadness <- select(financesum, sadness)
+financesurprise <- select(financesum, surprise)
+financetrust <- select(financesum, trust)
+financenegative <- select(financesum, negative)
+financepositive <- select(financesum, positive)
+
+financeanticipation <- rename(financeanticipation, anger = anticipation)
+financedisgust <- rename(financedisgust, anger = disgust)
+financefear <- rename(financefear, anger = fear)
+financejoy <- rename(financejoy, anger = joy)
+financesadness <- rename(financesadness, anger = sadness)
+financesurprise <- rename(financesurprise, anger = surprise)
+financetrust <- rename(financetrust, anger = trust)
+financenegative <- rename(financenegative, anger = negative)
+financepositive <- rename(financepositive, anger = positive)
+
+financesentiment <- bind_rows(financeanger, financeanticipation, financedisgust, financefear, financejoy, financesadness, financesurprise, financetrust, financenegative, financepositive)
+
+financesenttable <- bind_cols(sentiment, financesentiment)
+financesenttable <- rename(financesenttable, sentiment = ...1, value = anger)
+
+digitalanger <- select(digitalsum, anger)
+digitalanticipation <- select(digitalsum, anticipation)
+digitaldisgust <- select(digitalsum, disgust)
+digitalfear <- select(digitalsum, fear)
+digitaljoy <- select(digitalsum, joy)
+digitalsadness <- select(digitalsum, sadness)
+digitalsurprise <- select(digitalsum, surprise)
+digitaltrust <- select(digitalsum, trust)
+digitalnegative <- select(digitalsum, negative)
+digitalpositive <- select(digitalsum, positive)
+
+digitalanticipation <- rename(digitalanticipation, anger = anticipation)
+digitaldisgust <- rename(digitaldisgust, anger = disgust)
+digitalfear <- rename(digitalfear, anger = fear)
+digitaljoy <- rename(digitaljoy, anger = joy)
+digitalsadness <- rename(digitalsadness, anger = sadness)
+digitalsurprise <- rename(digitalsurprise, anger = surprise)
+digitaltrust <- rename(digitaltrust, anger = trust)
+digitalnegative <- rename(digitalnegative, anger = negative)
+digitalpositive <- rename(digitalpositive, anger = positive)
+
+digitalsentiment <- bind_rows(digitalanger, digitalanticipation, digitaldisgust, digitalfear, digitaljoy, digitalsadness, digitalsurprise, digitaltrust, digitalnegative, digitalpositive)
+
+digitalsenttable <- bind_cols(sentiment, digitalsentiment)
+digitalsenttable <- rename(digitalsenttable, sentiment = ...1, value = anger)
+
+medicineanger <- select(medicinesum, anger)
+medicineanticipation <- select(medicinesum, anticipation)
+medicinedisgust <- select(medicinesum, disgust)
+medicinefear <- select(medicinesum, fear)
+medicinejoy <- select(medicinesum, joy)
+medicinesadness <- select(medicinesum, sadness)
+medicinesurprise <- select(medicinesum, surprise)
+medicinetrust <- select(medicinesum, trust)
+medicinenegative <- select(medicinesum, negative)
+medicinepositive <- select(medicinesum, positive)
+
+medicineanticipation <- rename(medicineanticipation, anger = anticipation)
+medicinedisgust <- rename(medicinedisgust, anger = disgust)
+medicinefear <- rename(medicinefear, anger = fear)
+medicinejoy <- rename(medicinejoy, anger = joy)
+medicinesadness <- rename(medicinesadness, anger = sadness)
+medicinesurprise <- rename(medicinesurprise, anger = surprise)
+medicinetrust <- rename(medicinetrust, anger = trust)
+medicinenegative <- rename(medicinenegative, anger = negative)
+medicinepositive <- rename(medicinepositive, anger = positive)
+
+medicinesentiment <- bind_rows(medicineanger, medicineanticipation, medicinedisgust, medicinefear, medicinejoy, medicinesadness, medicinesurprise, medicinetrust, medicinenegative, medicinepositive)
+
+medicinesenttable <- bind_cols(sentiment, medicinesentiment)
+medicinesenttable <- rename(medicinesenttable, sentiment = ...1, value = anger)
+
+leadershipanger <- select(leadershipsum, anger)
+leadershipanticipation <- select(leadershipsum, anticipation)
+leadershipdisgust <- select(leadershipsum, disgust)
+leadershipfear <- select(leadershipsum, fear)
+leadershipjoy <- select(leadershipsum, joy)
+leadershipsadness <- select(leadershipsum, sadness)
+leadershipsurprise <- select(leadershipsum, surprise)
+leadershiptrust <- select(leadershipsum, trust)
+leadershipnegative <- select(leadershipsum, negative)
+leadershippositive <- select(leadershipsum, positive)
+
+leadershipanticipation <- rename(leadershipanticipation, anger = anticipation)
+leadershipdisgust <- rename(leadershipdisgust, anger = disgust)
+leadershipfear <- rename(leadershipfear, anger = fear)
+leadershipjoy <- rename(leadershipjoy, anger = joy)
+leadershipsadness <- rename(leadershipsadness, anger = sadness)
+leadershipsurprise <- rename(leadershipsurprise, anger = surprise)
+leadershiptrust <- rename(leadershiptrust, anger = trust)
+leadershipnegative <- rename(leadershipnegative, anger = negative)
+leadershippositive <- rename(leadershippositive, anger = positive)
+
+leadershipsentiment <- bind_rows(leadershipanger, leadershipanticipation, leadershipdisgust, leadershipfear, leadershipjoy, leadershipsadness, leadershipsurprise, leadershiptrust, leadershipnegative, leadershippositive)
+
+leadershipsenttable <- bind_cols(sentiment, leadershipsentiment)
+leadershipsenttable <- rename(leadershipsenttable, sentiment = ...1, value = anger)
+
+securityanger <- select(securitysum, anger)
+securityanticipation <- select(securitysum, anticipation)
+securitydisgust <- select(securitysum, disgust)
+securityfear <- select(securitysum, fear)
+securityjoy <- select(securitysum, joy)
+securitysadness <- select(securitysum, sadness)
+securitysurprise <- select(securitysum, surprise)
+securitytrust <- select(securitysum, trust)
+securitynegative <- select(securitysum, negative)
+securitypositive <- select(securitysum, positive)
+
+securityanticipation <- rename(securityanticipation, anger = anticipation)
+securitydisgust <- rename(securitydisgust, anger = disgust)
+securityfear <- rename(securityfear, anger = fear)
+securityjoy <- rename(securityjoy, anger = joy)
+securitysadness <- rename(securitysadness, anger = sadness)
+securitysurprise <- rename(securitysurprise, anger = surprise)
+securitytrust <- rename(securitytrust, anger = trust)
+securitynegative <- rename(securitynegative, anger = negative)
+securitypositive <- rename(securitypositive, anger = positive)
+
+securitysentiment <- bind_rows(securityanger, securityanticipation, securitydisgust, securityfear, securityjoy, securitysadness, securitysurprise, securitytrust, securitynegative, securitypositive)
+
+securitysenttable <- bind_cols(sentiment, securitysentiment)
+securitysenttable <- rename(securitysenttable, sentiment = ...1, value = anger)
+
+therapyanger <- select(therapysum, anger)
+therapyanticipation <- select(therapysum, anticipation)
+therapydisgust <- select(therapysum, disgust)
+therapyfear <- select(therapysum, fear)
+therapyjoy <- select(therapysum, joy)
+therapysadness <- select(therapysum, sadness)
+therapysurprise <- select(therapysum, surprise)
+therapytrust <- select(therapysum, trust)
+therapynegative <- select(therapysum, negative)
+therapypositive <- select(therapysum, positive)
+
+therapyanticipation <- rename(therapyanticipation, anger = anticipation)
+therapydisgust <- rename(therapydisgust, anger = disgust)
+therapyfear <- rename(therapyfear, anger = fear)
+therapyjoy <- rename(therapyjoy, anger = joy)
+therapysadness <- rename(therapysadness, anger = sadness)
+therapysurprise <- rename(therapysurprise, anger = surprise)
+therapytrust <- rename(therapytrust, anger = trust)
+therapynegative <- rename(therapynegative, anger = negative)
+therapypositive <- rename(therapypositive, anger = positive)
+
+therapysentiment <- bind_rows(therapyanger, therapyanticipation, therapydisgust, therapyfear, therapyjoy, therapysadness, therapysurprise, therapytrust, therapynegative, therapypositive)
+
+therapysenttable <- bind_cols(sentiment, therapysentiment)
+therapysenttable <- rename(therapysenttable, sentiment = ...1, value = anger)
+
+analyticsanger <- select(analyticssum, anger)
+analyticsanticipation <- select(analyticssum, anticipation)
+analyticsdisgust <- select(analyticssum, disgust)
+analyticsfear <- select(analyticssum, fear)
+analyticsjoy <- select(analyticssum, joy)
+analyticssadness <- select(analyticssum, sadness)
+analyticssurprise <- select(analyticssum, surprise)
+analyticstrust <- select(analyticssum, trust)
+analyticsnegative <- select(analyticssum, negative)
+analyticspositive <- select(analyticssum, positive)
+
+analyticsanticipation <- rename(analyticsanticipation, anger = anticipation)
+analyticsdisgust <- rename(analyticsdisgust, anger = disgust)
+analyticsfear <- rename(analyticsfear, anger = fear)
+analyticsjoy <- rename(analyticsjoy, anger = joy)
+analyticssadness <- rename(analyticssadness, anger = sadness)
+analyticssurprise <- rename(analyticssurprise, anger = surprise)
+analyticstrust <- rename(analyticstrust, anger = trust)
+analyticsnegative <- rename(analyticsnegative, anger = negative)
+analyticspositive <- rename(analyticspositive, anger = positive)
+
+analyticssentiment <- bind_rows(analyticsanger, analyticsanticipation, analyticsdisgust, analyticsfear, analyticsjoy, analyticssadness, analyticssurprise, analyticstrust, analyticsnegative, analyticspositive)
+
+analyticssenttable <- bind_cols(sentiment, analyticssentiment)
+analyticssenttable <- rename(analyticssenttable, sentiment = ...1, value = anger)
+
+capstoneanger <- select(capstonesum, anger)
+capstoneanticipation <- select(capstonesum, anticipation)
+capstonedisgust <- select(capstonesum, disgust)
+capstonefear <- select(capstonesum, fear)
+capstonejoy <- select(capstonesum, joy)
+capstonesadness <- select(capstonesum, sadness)
+capstonesurprise <- select(capstonesum, surprise)
+capstonetrust <- select(capstonesum, trust)
+capstonenegative <- select(capstonesum, negative)
+capstonepositive <- select(capstonesum, positive)
+
+capstoneanticipation <- rename(capstoneanticipation, anger = anticipation)
+capstonedisgust <- rename(capstonedisgust, anger = disgust)
+capstonefear <- rename(capstonefear, anger = fear)
+capstonejoy <- rename(capstonejoy, anger = joy)
+capstonesadness <- rename(capstonesadness, anger = sadness)
+capstonesurprise <- rename(capstonesurprise, anger = surprise)
+capstonetrust <- rename(capstonetrust, anger = trust)
+capstonenegative <- rename(capstonenegative, anger = negative)
+capstonepositive <- rename(capstonepositive, anger = positive)
+
+capstonesentiment <- bind_rows(capstoneanger, capstoneanticipation, capstonedisgust, capstonefear, capstonejoy, capstonesadness, capstonesurprise, capstonetrust, capstonenegative, capstonepositive)
+
+capstonesenttable <- bind_cols(sentiment, capstonesentiment)
+capstonesenttable <- rename(capstonesenttable, sentiment = ...1, value = anger)
+
+commonanger <- select(commonsum, anger)
+commonanticipation <- select(commonsum, anticipation)
+commondisgust <- select(commonsum, disgust)
+commonfear <- select(commonsum, fear)
+commonjoy <- select(commonsum, joy)
+commonsadness <- select(commonsum, sadness)
+commonsurprise <- select(commonsum, surprise)
+commontrust <- select(commonsum, trust)
+commonnegative <- select(commonsum, negative)
+commonpositive <- select(commonsum, positive)
+
+commonanticipation <- rename(commonanticipation, anger = anticipation)
+commondisgust <- rename(commondisgust, anger = disgust)
+commonfear <- rename(commonfear, anger = fear)
+commonjoy <- rename(commonjoy, anger = joy)
+commonsadness <- rename(commonsadness, anger = sadness)
+commonsurprise <- rename(commonsurprise, anger = surprise)
+commontrust <- rename(commontrust, anger = trust)
+commonnegative <- rename(commonnegative, anger = negative)
+commonpositive <- rename(commonpositive, anger = positive)
+
+commonsentiment <- bind_rows(commonanger, commonanticipation, commondisgust, commonfear, commonjoy, commonsadness, commonsurprise, commontrust, commonnegative, commonpositive)
+
+commonsenttable <- bind_cols(sentiment, commonsentiment)
+commonsenttable <- rename(commonsenttable, sentiment = ...1, value = anger)
+
+managementanger <- select(managementsum, anger)
+managementanticipation <- select(managementsum, anticipation)
+managementdisgust <- select(managementsum, disgust)
+managementfear <- select(managementsum, fear)
+managementjoy <- select(managementsum, joy)
+managementsadness <- select(managementsum, sadness)
+managementsurprise <- select(managementsum, surprise)
+managementtrust <- select(managementsum, trust)
+managementnegative <- select(managementsum, negative)
+managementpositive <- select(managementsum, positive)
+
+managementanticipation <- rename(managementanticipation, anger = anticipation)
+managementdisgust <- rename(managementdisgust, anger = disgust)
+managementfear <- rename(managementfear, anger = fear)
+managementjoy <- rename(managementjoy, anger = joy)
+managementsadness <- rename(managementsadness, anger = sadness)
+managementsurprise <- rename(managementsurprise, anger = surprise)
+managementtrust <- rename(managementtrust, anger = trust)
+managementnegative <- rename(managementnegative, anger = negative)
+managementpositive <- rename(managementpositive, anger = positive)
+
+managementsentiment <- bind_rows(managementanger, managementanticipation, managementdisgust, managementfear, managementjoy, managementsadness, managementsurprise, managementtrust, managementnegative, managementpositive)
+
+managementsenttable <- bind_cols(sentiment, managementsentiment)
+managementsenttable <- rename(managementsenttable, sentiment = ...1, value = anger)
+
+mathematicsanger <- select(mathematicssum, anger)
+mathematicsanticipation <- select(mathematicssum, anticipation)
+mathematicsdisgust <- select(mathematicssum, disgust)
+mathematicsfear <- select(mathematicssum, fear)
+mathematicsjoy <- select(mathematicssum, joy)
+mathematicssadness <- select(mathematicssum, sadness)
+mathematicssurprise <- select(mathematicssum, surprise)
+mathematicstrust <- select(mathematicssum, trust)
+mathematicsnegative <- select(mathematicssum, negative)
+mathematicspositive <- select(mathematicssum, positive)
+
+mathematicsanticipation <- rename(mathematicsanticipation, anger = anticipation)
+mathematicsdisgust <- rename(mathematicsdisgust, anger = disgust)
+mathematicsfear <- rename(mathematicsfear, anger = fear)
+mathematicsjoy <- rename(mathematicsjoy, anger = joy)
+mathematicssadness <- rename(mathematicssadness, anger = sadness)
+mathematicssurprise <- rename(mathematicssurprise, anger = surprise)
+mathematicstrust <- rename(mathematicstrust, anger = trust)
+mathematicsnegative <- rename(mathematicsnegative, anger = negative)
+mathematicspositive <- rename(mathematicspositive, anger = positive)
+
+mathematicssentiment <- bind_rows(mathematicsanger, mathematicsanticipation, mathematicsdisgust, mathematicsfear, mathematicsjoy, mathematicssadness, mathematicssurprise, mathematicstrust, mathematicsnegative, mathematicspositive)
+
+mathematicssenttable <- bind_cols(sentiment, mathematicssentiment)
+mathematicssenttable <- rename(mathematicssenttable, sentiment = ...1, value = anger)
+
+nutritionanger <- select(nutritionsum, anger)
+nutritionanticipation <- select(nutritionsum, anticipation)
+nutritiondisgust <- select(nutritionsum, disgust)
+nutritionfear <- select(nutritionsum, fear)
+nutritionjoy <- select(nutritionsum, joy)
+nutritionsadness <- select(nutritionsum, sadness)
+nutritionsurprise <- select(nutritionsum, surprise)
+nutritiontrust <- select(nutritionsum, trust)
+nutritionnegative <- select(nutritionsum, negative)
+nutritionpositive <- select(nutritionsum, positive)
+
+nutritionanticipation <- rename(nutritionanticipation, anger = anticipation)
+nutritiondisgust <- rename(nutritiondisgust, anger = disgust)
+nutritionfear <- rename(nutritionfear, anger = fear)
+nutritionjoy <- rename(nutritionjoy, anger = joy)
+nutritionsadness <- rename(nutritionsadness, anger = sadness)
+nutritionsurprise <- rename(nutritionsurprise, anger = surprise)
+nutritiontrust <- rename(nutritiontrust, anger = trust)
+nutritionnegative <- rename(nutritionnegative, anger = negative)
+nutritionpositive <- rename(nutritionpositive, anger = positive)
+
+nutritionsentiment <- bind_rows(nutritionanger, nutritionanticipation, nutritiondisgust, nutritionfear, nutritionjoy, nutritionsadness, nutritionsurprise, nutritiontrust, nutritionnegative, nutritionpositive)
+
+nutritionsenttable <- bind_cols(sentiment, nutritionsentiment)
+nutritionsenttable <- rename(nutritionsenttable, sentiment = ...1, value = anger)
+
+societyanger <- select(societysum, anger)
+societyanticipation <- select(societysum, anticipation)
+societydisgust <- select(societysum, disgust)
+societyfear <- select(societysum, fear)
+societyjoy <- select(societysum, joy)
+societysadness <- select(societysum, sadness)
+societysurprise <- select(societysum, surprise)
+societytrust <- select(societysum, trust)
+societynegative <- select(societysum, negative)
+societypositive <- select(societysum, positive)
+
+societyanticipation <- rename(societyanticipation, anger = anticipation)
+societydisgust <- rename(societydisgust, anger = disgust)
+societyfear <- rename(societyfear, anger = fear)
+societyjoy <- rename(societyjoy, anger = joy)
+societysadness <- rename(societysadness, anger = sadness)
+societysurprise <- rename(societysurprise, anger = surprise)
+societytrust <- rename(societytrust, anger = trust)
+societynegative <- rename(societynegative, anger = negative)
+societypositive <- rename(societypositive, anger = positive)
+
+societysentiment <- bind_rows(societyanger, societyanticipation, societydisgust, societyfear, societyjoy, societysadness, societysurprise, societytrust, societynegative, societypositive)
+
+societysenttable <- bind_cols(sentiment, societysentiment)
+societysenttable <- rename(societysenttable, sentiment = ...1, value = anger)
+
+marketinganger <- select(marketingsum, anger)
+marketinganticipation <- select(marketingsum, anticipation)
+marketingdisgust <- select(marketingsum, disgust)
+marketingfear <- select(marketingsum, fear)
+marketingjoy <- select(marketingsum, joy)
+marketingsadness <- select(marketingsum, sadness)
+marketingsurprise <- select(marketingsum, surprise)
+marketingtrust <- select(marketingsum, trust)
+marketingnegative <- select(marketingsum, negative)
+marketingpositive <- select(marketingsum, positive)
+
+marketinganticipation <- rename(marketinganticipation, anger = anticipation)
+marketingdisgust <- rename(marketingdisgust, anger = disgust)
+marketingfear <- rename(marketingfear, anger = fear)
+marketingjoy <- rename(marketingjoy, anger = joy)
+marketingsadness <- rename(marketingsadness, anger = sadness)
+marketingsurprise <- rename(marketingsurprise, anger = surprise)
+marketingtrust <- rename(marketingtrust, anger = trust)
+marketingnegative <- rename(marketingnegative, anger = negative)
+marketingpositive <- rename(marketingpositive, anger = positive)
+
+marketingsentiment <- bind_rows(marketinganger, marketinganticipation, marketingdisgust, marketingfear, marketingjoy, marketingsadness, marketingsurprise, marketingtrust, marketingnegative, marketingpositive)
+
+marketingsenttable <- bind_cols(sentiment, marketingsentiment)
+marketingsenttable <- rename(marketingsenttable, sentiment = ...1, value = anger)
+
+d4_to_plot<-d4%>%
+  group_by(cluster)%>%
+  summarize(across(X1:X15,c(mean)))%>%
+  gather(X1_1:X15_1,key = "Topic",value = "Probability") 
+d4_sep<-d4%>%
+  separate(id,c("Code","Number"),sep="_")
+d4_to_plot2<-d4_sep%>%
+  group_by(cluster, Code)%>%
+  count(Code)
+Code <- unique(d4_to_plot2$Code)
+Topic<- unique(d4_to_plot$Topic)
+
+#=====================================================#
+
+ui <-  dashboardPage(
+  header = dashboardHeader(title = "CPS Project"),
+  sidebar = dashboardSidebar(
+    sidebarMenu(
+      menuItem("Dashboard", tabName = "dashboard", icon = icon("dashboard")),
+      menuItem("Influential Words", tabName = "words", icon = icon("dashboard")),
+      menuItem("Sentiment", tabName = "sentiment", icon = icon("dashboard"))
+    )
+  ),
+  body = dashboardBody(
+    
+    use_theme(mytheme), # <-- use the theme
+    
+    tabItems(
+      tabItem(
+        "dashboard",
+        
+        # infoBoxes
+        fluidRow(
+          infoBox(
+            "Student", "1225", "Top Ocurring Word", icon = icon("sliders"),
+            color = "light-blue"
+          ),
+          infoBox("Offer-Student", "579", "Top 2 N-Grams", icon = icon("sliders"),
+                  color = "light-blue"
+          ),
+          infoBox(
+            "Design", "65", "Most Influential Word",icon = icon("sliders"),
+            color = "light-blue")
+          ),
+        fluidPage(
+  titlePanel("Placeholder"),
+  
+  sidebarLayout(
+    sidebarPanel(width=2,
+      sliderInput("mindepth1",
+                  "cluster:",
+                  min = 0,
+                  max = 4,
+                  value = 4),
+      sliderInput("maxdepth1",
+                  "probability:",
+                  min = 0,
+                  max = 1,
+                  value = 1),
+      
+      selectInput(inputId='select', 
+                  label = 'Topic',
+                  choices =  Topic,
+                  multiple = TRUE),
+      selectInput(inputId='select2', 
+                  label = 'Code',
+                  choices =  Code,
+                  multiple = TRUE)
+    ),
+    
+    mainPanel(
+      plotlyOutput("barplot"),
+      plotlyOutput("barplot2")
+    ))
+      )
+    ),
+  tabItem(tabName = "words",
+          fluidRow(
+            box(
+              selectInput("topic", h3("Topic"),
+                          choices = list("Finance" = "tfinance", "Digital" = "tdigital",
+                                         "Medicine" = "tmedicine", "Leadership" = "tleadership",
+                                         "Security" = "tsecurity", "Therapy" = "ttherapy",
+                                         "Analytics" = "tanalytics", "Capstone" = "tcapstone",
+                                         "Common" = "tcommon", "Management" = "tmanagement",
+                                         "Mathematics" = "tmathematics", "Psychology" = "tpsychology",
+                                         "Nutrition" = "tnutrition", "Society" = "tsociety",
+                                         "Marketing" = "tmarketing"))
+            ),
+            column(width = 12,
+            box(title = "Most Influential Words per Topic", plotOutput("plot")),
+            box(title = "Most Word Occurences per Topic", wordcloud2Output("cloud"))
+            )
+          )),
+          tabItem(tabName = "sentiment",
+                  fluidRow(
+                    box(
+                      selectInput("topic2", h3("Topic"),
+                                  choices = list("Finance" = "financesenttable", "Digital" = "digitalsenttable",
+                                                 "Medicine" = "medicinesenttable", "Leadership" = "leadershipsenttable",
+                                                 "Security" = "securitysenttable", "Therapy" = "therapysenttable",
+                                                 "Analytics" = "analyticssenttable", "Capstone" = "capstonesenttable",
+                                                 "Common" = "commonsenttable", "Management" = "managementsenttable",
+                                                 "Mathematics" = "mathematicssenttable", "Psychology" = "psychologysenttable",
+                                                 "Nutrition" = "nutritionsenttable", "Society" = "societysenttable",
+                                                 "Marketing" = "marketingsenttable"))
+                    ),
+                    box(plotlyOutput("plot2"), title = "Sentiment per Topic")
+                  )
+          )
+  )
+)
+  
+     
+  )
+
+
+server <- function(input, output) {
+  
+  output$plot<-renderPlot({
+    x=get(input$topic)
+    barplot(10 + x$diff_ratio,
+            col="blue",
+            names = x$term, 
+            horiz = FALSE,
+            las=1)
+  })
+  
+    output$cloud<-renderWordcloud2({
+      x=get(input$topic)
+      topicwordinstances <- inner_join(wordinstances, x, by = c("word" = "term"))
+      topicwordinstances <- select(topicwordinstances, word, n)
+      wordcloud2(topicwordinstances)})
+    
+    output$plot2<-renderPlotly({
+      y=get(input$topic2)
+      ggplot(y, aes(x=sentiment, y=value, size=value/sum(value)))+geom_point()
+    })
+    
+    output$barplot <- renderPlotly({
+      
+      
+      data=d4_to_plot%>%
+        filter(Topic %in% input$select)
+      ggplot(data,aes(x=cluster,y=Probability,group = Topic, fill = Topic ))+
+        geom_col(position = position_dodge2(preserve = "total"  ))+
+        coord_cartesian(xlim=c(0, input$mindepth1), ylim = c(0, input$maxdepth1)) 
+      
+      
+     })
+    
+    output$barplot2 <-  renderPlotly({
+      data2=d4_to_plot2%>%
+      filter(Code %in% input$select2)
+      ggplot(data2,aes(x=cluster,y=n, fill = Code))+
+        geom_col(position = position_dodge2(preserve = "total"  ))  })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
