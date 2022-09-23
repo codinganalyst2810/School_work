@@ -1,0 +1,278 @@
+install.packages("dplyr")
+library(dplyr)
+library(readr)
+library(tidyr)
+library(lpSolve)
+
+memory.limit(size = 100000)
+#memory.limit(size=2500)
+###Cleaning sales file#########
+#s<-sales_east%>%
+  #filter(state!='MEXICO'& state!= 'ZZ'&  state!= 'INDONESIA'& state!= 'No_Data Records'& state!= 'INDIA' & state!= "HN"& state!= "GL"  & state!= "CAMBODIA"& 
+           #state!= 'KR'&state!= 'CI'& state!= '23'&state!= '135319'&state!= 'o'&state!= 'NULL'&state!= '58395'&state!= '-'  &state!= 't' )
+#write_csv(s, "/cleanstates.csv")
+
+# setwd("C:/Users/OneDrive/Desktop/BA Capstone/Data")
+### Reading in files####
+#sales_east<-read.csv("cleanstates.csv")
+current_warehouses_w_fixed_costs<-read.csv("current_warehouses_w_fixed_costs.csv")
+warehouse_to_zip4_dist_east_with_sales<-read.csv("warehouse_to_zip4_dist_east_with_sales.csv")
+zip4sales<-read.csv("zip4sales.csv")
+ZipCodeDatabase_NE_SE<-read.csv("ZipCodeDatabase_NE_SE_v3.csv")
+
+#############################################################################################
+'Constarint 1 - Each zip-code is assigned to only one warehouse
+ Constarint 2 - 90% of zips are within next day delivery radius
+ Constarint 3 -	A warehouse is kept open as soon as at-least one zip is assigned to it'
+#################################################################################################
+
+#unique_sales <- data.frame(unique(zip4sales$sales)) #### checking sales for 0's and negative values
+
+############################## Converting Sales of each Zip4 to number of tons ##############################
+
+sales_to_tons <- zip4sales %>%
+  mutate(sales_1ton = (2000/24)*100) ## adding a calculation of number of dollar sales in 1 ton
+
+sales_to_tons$no_of_tons <- sales_to_tons$sales/sales_to_tons$sales_1ton ## converting the total sales to tons
+
+sales_to_tons$no_of_tons[sales_to_tons$no_of_tons == 0]<- 0.001 ## replacing zeros with a small value
+
+#unique(sales_to_tons$no_of_tons) ## checking if 0's are replaced
+
+####################### Calculating ton-miles and Shipping cost for each zip4 to warehouse combo ########################
+
+miles_data<- warehouse_to_zip4_dist_east_with_sales
+miles_data<-miles_data%>%
+  select(WH_ID, customer_zip4, calculated_miles)%>%
+  arrange(customer_zip4)%>%
+  rename(Zip4 = customer_zip4)
+
+ton_miles <- miles_data %>% 
+  left_join(sales_to_tons, by= "Zip4", keep = FALSE)
+
+options(scipen = 1000)
+ton_miles$ton_miles <- ton_miles$calculated_miles*ton_miles$no_of_tons
+ton_miles$shipping_cost <- ton_miles$ton_miles*0.99
+
+############################# Constraint 2 -Zip4_warehouse combo decision variables ############################
+
+ton_miles <- ton_miles %>% 
+  mutate(radius_300 = ifelse(calculated_miles <= 300, 1,0), 
+         radius_250 = ifelse(calculated_miles <= 250, 1,0),
+         radius_150 = ifelse(calculated_miles <= 150, 1,0))
+
+ton_miles <- ton_miles %>%
+  mutate(sales_300 = radius_300*sales,
+         sales_250 = radius_250*sales,
+         sales_150 = radius_150*sales)
+
+############################# Creating Decision vars - Zip4-warehouse combo ################################
+
+warepluszips<- warehouse_to_zip4_dist_east_with_sales
+warepluszips<-warepluszips%>%
+  select(WH_ID, customer_zip4)%>%
+  arrange(customer_zip4)
+
+## this new column of warehouse zip4 combo, gives the decision variables
+warepluszips<-warepluszips%>%
+mutate(decision_vars = paste0(warepluszips$WH_ID,'|',"Z_", warepluszips$customer_zip4))##zip+warehouse concatenate
+
+######################## Zip4_warehouse combo decision variables - constraint creation ####################
+combo_decision_vars <-warepluszips 
+combo_decision_vars<-rename(combo_decision_vars,zip = customer_zip4)
+
+library(fastDummies) 
+combo_decision_vars <- dummy_cols(combo_decision_vars, select_columns= 'zip') #### Constraint 1 
+combo_decision_vars$radius_300 <- ton_miles$radius_300#### constraint 2 append 
+combo_decision_vars$radius_250 <- ton_miles$radius_250 #### constraint 2 append
+combo_decision_vars$radius_150 <- ton_miles$radius_150
+
+combo_decision_vars$sales_300 <- ton_miles$sales_300#### constraint 2 append 
+combo_decision_vars$sales_250 <- ton_miles$sales_250 #### constraint 2 append
+combo_decision_vars$sales_150 <- ton_miles$sales_150
+combo_decision_vars <- dummy_cols(combo_decision_vars, select_columns= 'WH_ID') #### Constraint 3 
+names(combo_decision_vars)<-sub('WH_ID_','',names(combo_decision_vars))
+
+#head_datadummy<-head(combo_decision_vars, 30) #### save sample
+
+###################################  fixed cost and constraints - warehouse decision vars #########################################
+wh_costs <- current_warehouses_w_fixed_costs %>%
+  rename(WH_ID = ?..WH_ID)%>%
+  select(WH_ID,WH_Fixed_Cost)
+
+Zip4_names <- paste0("zip_", zip4sales$Zip4)
+
+for(x in Zip4_names){   ##### Constraint 1
+  wh_costs[,x] <- 0
+ }
+
+wh_costs <- wh_costs %>%
+  mutate(radius_300 = 0, radius_250 = 0, radius_150 = 0,
+         sales_300 = 0, sales_250 = 0, sales_150 = 0) ####### Constraint 2
+
+
+wh_matrix <- diag(-3192, nrow = 11, ncol=11)  ######## Constraint 3
+wh_constraint <- as.data.frame(wh_matrix)
+colnames(wh_constraint)<- wh_costs$WH_ID
+
+wh_costs <- cbind(wh_costs, wh_constraint)
+
+########################################## Constraints Coefficient Matrix #########################################
+wh_costs <- select(wh_costs, -WH_Fixed_Cost)
+wh_costs <- rename(wh_costs,decision_vars = WH_ID)
+combo_decision_vars <- select(combo_decision_vars,-c(WH_ID,zip))
+Constraint_coeff <- rbind(combo_decision_vars, wh_costs)
+
+model1 <- Constraint_coeff %>% select(-c(radius_250, radius_150,sales_150,sales_250,sales_300))
+model2 <- Constraint_coeff %>% select(-c(radius_300, radius_150,sales_150,sales_250,sales_300))
+model3 <- Constraint_coeff %>% select(-c(radius_250, radius_300,sales_150,sales_250,sales_300))
+                                         
+model4 <- Constraint_coeff %>% select(-c(radius_250, radius_150, radius_300,sales_250,sales_150))
+model5 <- Constraint_coeff %>% select(-c(radius_300, radius_150, radius_250,sales_150,sales_300))
+model6 <- Constraint_coeff %>% select(-c(radius_250, radius_300, radius_150,sales_250,sales_300))
+
+## model 1 coefficient matrix
+model1_mat <- as.matrix(model1)
+model1_mat1 <- model1_mat[,-1]
+rownames(model1_mat1) <- model1_mat[,1]
+model1_mat1 <- t(model1_mat1)##### Transpose matrix to get decision_vars as columns
+
+## model 2 coefficient matrix
+model2_mat <- as.matrix(model2)
+model2_mat1 <- model2_mat[,-1]
+rownames(model2_mat1) <- model2_mat[,1]
+model2_mat1 <- t(model2_mat1)
+
+## model 3 coefficient matrix
+model3_mat <- as.matrix(model3)
+model3_mat1 <- model3_mat[,-1]
+rownames(model3_mat1) <- model3_mat[,1]
+model3_mat1 <- t(model3_mat1)
+
+## model 4 coefficient matrix
+model4_mat <- as.matrix(model4)
+model4_mat1 <- model4_mat[,-1]
+rownames(model4_mat1) <- model4_mat[,1]
+model4_mat1 <- t(model4_mat1)
+
+## model 5 coefficient matrix
+model5_mat <- as.matrix(model5)
+model5_mat1 <- model5_mat[,-1]
+rownames(model5_mat1) <- model5_mat[,1]
+model5_mat1 <- t(model5_mat1)
+
+## model 6 coefficient matrix
+model6_mat <- as.matrix(model6)
+model6_mat1 <- model6_mat[,-1]
+rownames(model6_mat1) <- model6_mat[,1]
+model6_mat1 <- t(model6_mat1)
+
+####################################### Objective function ###################################################
+total_sales <- sum(zip4sales$sales)
+
+combo_vars_obj <- data.frame(WH_ID = combo_decision_vars$decision_vars)
+combo_vars_obj$cost <- ton_miles$shipping_cost
+wh_vars_obj <- current_warehouses_w_fixed_costs %>%
+  select(?..WH_ID, WH_Fixed_Cost)%>%
+  rename(cost = WH_Fixed_Cost, WH_ID =?..WH_ID)
+
+obj_fun_df <- rbind(combo_vars_obj,wh_vars_obj)
+
+
+obj_fun <- obj_fun_df$cost
+
+const_direc <- c(rep("=",3192),">=", rep("<=",11))
+
+const_rhs1 <- c(rep(1,3192),0.9*3192,rep(0,11))
+
+const_rhs2 <- c(rep(1,3192),0.9*total_sales,rep(0,11))
+
+const_rhs3 <- c(rep(1,3192),0.85*total_sales,rep(0,11))
+
+###### Solving Model 1##############
+
+lp1 <- lp(direction = "min",obj_fun,  model1_mat1,
+          const_direc, const_rhs1, binary.vec = c(1:35123))
+
+min_cost_model1<-lp1$objval
+df_model1<-lp1$solution
+
+model1_sol <- as.matrix(df_model1, nrow =1, ncol=35123)
+solve_model1 <- obj_fun_df
+solve_model1$solution <- model1_sol
+
+write.csv(solve_model1,"Model1.csv")
+
+###### Solving Model 2##############
+
+lp2 <- lp(direction = "min",obj_fun,  model2_mat1,
+          const_direc, const_rhs1, binary.vec = c(1:35123))
+
+min_cost_model2<-lp2$objval
+df_model2<-lp2$solution
+
+model2_sol <- as.matrix(df_model2, nrow =1, ncol=35123)
+solve_model2 <- obj_fun_df
+solve_model2$solution <- model2_sol
+
+write.csv(solve_model2,"Model2.csv")
+
+###### Solving Model 3 ##############
+
+lp3 <- lp(direction = "min",obj_fun,  model3_mat1,
+          const_direc, const_rhs1, binary.vec = c(1:35123))
+
+min_cost_model3<-lp3$objval
+df_model3<-lp3$solution
+
+model3_sol <- as.matrix(df_model3, nrow =1, ncol=35123)
+solve_model3 <- obj_fun_df
+solve_model3$solution <- model3_sol
+
+write.csv(solve_model3,"Model3_1.csv")
+
+###### Solving Model 4 ##############
+
+lp4 <- lp(direction = "min",obj_fun,  model4_mat1,
+          const_direc, const_rhs2, binary.vec = c(1:35123))
+
+min_cost_model4<-lp4$objval
+df_model4<-lp4$solution
+
+model4_sol <- as.matrix(df_model4, nrow =1, ncol=35123)
+solve_model4 <- obj_fun_df
+solve_model4$solution <- model4_sol
+
+write.csv(solve_model4,"Model4.csv")
+
+###### Solving Model 5 ##############
+
+lp5 <- lp(direction = "min",obj_fun,  model5_mat1,
+          const_direc, const_rhs2, binary.vec = c(1:35123))
+
+min_cost_model5<-lp5$objval
+df_model5<-lp5$solution
+
+model5_sol <- as.matrix(df_model5, nrow =1, ncol=35123)
+solve_model5 <- obj_fun_df
+solve_model5$solution <- model5_sol
+
+write.csv(solve_model5,"Model5.csv")
+
+###### Solving Model 6 ##############
+
+lp6 <- lp(direction = "min",obj_fun,  model6_mat1,
+          const_direc, const_rhs2, binary.vec = c(1:35123))
+
+min_cost_model6<-lp6$objval
+df_model6<-lp6$solution
+
+model6_sol <- as.matrix(df_model6, nrow =1, ncol=35123)
+solve_model6 <- obj_fun_df
+solve_model6$solution <- model6_sol
+
+write.csv(solve_model6,"Model6.csv")
+
+#tons_matrix <- matrix(sales_to_tons$no_of_tons, nrow = nrow(sales_to_tons), ncol=nrow(sales_to_tons), dimnames = list(sales_to_tons$Zip4))
+
+#miles_matrix <- matrix(ton_miles$calculated_miles, nrow = 3192, ncol =11,byrow = TRUE)
